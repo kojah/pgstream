@@ -151,13 +151,16 @@ func (sg *SnapshotGenerator) CreateSnapshot(ctx context.Context, ss *snapshot.Sn
 	errGroup, ctx := errgroup.WithContext(ctx)
 	schemaTablesChan := make(chan *schemaTables)
 	schemaErrs := make(map[string]error, len(ss.SchemaTables))
+	var schemaErrsMu sync.Mutex
 	for i := uint(0); i < sg.snapshotWorkers; i++ {
 		errGroup.Go(func() error {
 			for schemaTables := range schemaTablesChan {
 				sg.logger.Info("creating data snapshot", loglib.Fields{"schema": schemaTables.schema, "tables": schemaTables.tables})
 				if err := sg.createSchemaSnapshot(ctx, schemaTables); err != nil {
 					sg.logger.Error(err, "creating data snapshot", loglib.Fields{"schema": schemaTables.schema, "tables": schemaTables.tables, "error": err.Error()})
+					schemaErrsMu.Lock()
 					schemaErrs[schemaTables.schema] = err
+					schemaErrsMu.Unlock()
 				}
 			}
 			return nil
